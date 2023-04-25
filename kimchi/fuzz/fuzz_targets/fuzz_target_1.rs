@@ -12,7 +12,7 @@ use kimchi::{
         constants::PlonkSpongeConstantsKimchi
     },
     groupmap::GroupMap,
-    o1_utils::dense_polynomial::ExtendedDensePolynomial
+    o1_utils::dense_polynomial::ExtendedDensePolynomial,
 };
 use ark_poly::{UVPolynomial, Polynomial, Radix2EvaluationDomain, univariate::DensePolynomial};
 use ark_ff::{UniformRand, Zero};
