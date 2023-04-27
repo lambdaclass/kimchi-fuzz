@@ -10,6 +10,7 @@ use kimchi::{
         polynomials::{and, xor},
         wires::Wire,
     },
+    tests::framework,
     prover_index::{testing::new_index_for_test_with_lookups, ProverIndex},
     proof::{ProverProof, RecursionChallenge},
     verifier::verify,
@@ -140,75 +141,3 @@ where
     )
     .map_err(|e| e.to_string());
 }
-
-// /// Reads bytes in big-endian, and converts them to a field element.
-// /// If the bytes are larger than the modulus, it will reduce them.
-// fn from_be_bytes_mod_order(bytes: &[u8]) -> PrimeField{
-//     let num_modulus_bytes = ((PrimeField::Params::MODULUS_BITS + 7) / 8) as usize;
-//     let num_bytes_to_directly_convert = min(num_modulus_bytes - 1, bytes.len());
-//     // Copy the leading big-endian bytes directly into a field element.
-//     // The number of bytes directly converted must be less than the
-//     // number of bytes needed to represent the modulus, as we must begin
-//     // modular reduction once the data is of the same number of bytes as the modulus.
-//     let mut bytes_to_directly_convert = Vec::new();
-//     bytes_to_directly_convert.extend(bytes[..num_bytes_to_directly_convert].iter().rev());
-//     // Guaranteed to not be None, as the input is less than the modulus size.
-//     let mut res = PrimeField::from_random_bytes(&bytes_to_directly_convert).unwrap();
-
-//     // Update the result, byte by byte.
-//     // We go through existing field arithmetic, which handles the reduction.
-//     // TODO: If we need higher speeds, parse more bytes at once, or implement
-//     // modular multiplication by a u64
-//     let window_size = PrimeField::from(256u64);
-//     for byte in bytes[num_bytes_to_directly_convert..].iter() {
-//         res *= window_size;
-//         res += PrimeField::from(*byte);
-//     }
-//     res
-// }
-// /// Create and verify a proof
-// pub(crate) fn prove_and_verify<EFqSponge, EFrSponge>(self) -> Result<(), String>
-// where
-//     EFqSponge: Clone + FqSponge<G::BaseField, G, G::ScalarField>,
-//     EFrSponge: FrSponge<G::ScalarField>,
-// {
-//     let prover = self.0.prover_index.unwrap();
-//     let witness = self.0.witness.unwrap();
-
-//     if !self.0.disable_gates_checks {
-//         // Note: this is already done by ProverProof::create_recursive::()
-//         //       not sure why we do it here
-//         prover
-//             .verify(&witness, &self.0.public_inputs)
-//             .map_err(|e| format!("{e:?}"))?;
-//     }
-
-//     // add the proof to the batch
-//     let start = Instant::now();
-
-//     let group_map = <G as CommitmentCurve>::Map::setup();
-
-//     let proof = ProverProof::create_recursive::<EFqSponge, EFrSponge>(
-//         &group_map,
-//         witness,
-//         &self.0.runtime_tables,
-//         &prover,
-//         self.0.recursion,
-//         None,
-//     )
-//     .map_err(|e| e.to_string())?;
-//     println!("- time to create proof: {:?}s", start.elapsed().as_secs());
-
-//     // verify the proof (propagate any errors)
-//     let start = Instant::now();
-//     verify::<G, EFqSponge, EFrSponge>(
-//         &group_map,
-//         &self.0.verifier_index.unwrap(),
-//         &proof,
-//         &self.0.public_inputs,
-//     )
-//     .map_err(|e| e.to_string())?;
-//     println!("- time to verify: {}ms", start.elapsed().as_millis());
-
-//     Ok(())
-// }
