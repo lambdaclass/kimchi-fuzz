@@ -5,7 +5,9 @@ use kimchi::{
             runtime_tables::{RuntimeTable, RuntimeTableCfg},
             tables::LookupTable,
         },
-        wires::COLUMNS,
+        wires::{COLUMNS, PERMUTS},
+        witness::{self, Variables},
+        polynomials::{and, xor::{num_xors, layout}},
     },
     curve::KimchiCurve,
     plonk_sponge::FrSponge,
@@ -13,13 +15,17 @@ use kimchi::{
     prover_index::{testing::new_index_for_test_with_lookups, ProverIndex},
     verifier::verify,
     verifier_index::VerifierIndex,
+    variable_map,
 };
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, SquareRootField, Zero};
+use ark_poly::{EvaluationDomain};
 use kimchi::groupmap::GroupMap;
 use mina_poseidon::sponge::FqSponge;
-use num_bigint::BigUint;
 use poly_commitment::commitment::CommitmentCurve;
 use std::{fmt::Write, mem, time::Instant};
+use num_bigint::BigUint;
+use o1_utils::{BigUintFieldHelpers, BigUintHelpers, BitwiseOps, FieldHelpers, Two};
+use std::array;
 
 #[derive(Default, Clone)]
 pub(crate) struct FuzzFramework<G: KimchiCurve> {
@@ -155,14 +161,28 @@ where
         EFrSponge: FrSponge<G::ScalarField>,
     {
         let prover = self.0.prover_index.unwrap();
-        let witness = self.0.witness.unwrap();
+        let mut witness= self.0.witness.unwrap();
 
-        if !self.0.disable_gates_checks {
-            // Note: this is already done by ProverProof::create_recursive::()
-            //       not sure why we do it here
-            prover
-                .verify(&witness, &self.0.public_inputs)
-                .map_err(|e| format!("{e:?}"))?;
+        let pad = vec![G::ScalarField::zero(); prover.cs.domain.d1.size() - witness[0].len()];
+        let mut witness = array::from_fn(|i| {
+            let mut w = witness[i].to_vec();
+            w.extend_from_slice(&pad);
+            w
+        });
+
+        for (row, gate) in prover.cs.gates.iter().enumerate() {
+            // check if wires are connected
+            for col in 0..PERMUTS {
+                let wire = gate.wires[col];
+
+                if wire.col >= PERMUTS {
+                    println!("aaaasdfghjjdfhsgcgvbjecvof");
+                }
+                if witness[col][row] != witness[wire.col][wire.row] {
+                    witness[col][row] = witness[wire.col][wire.row]
+                    
+                }
+            }
         }
 
         // add the proof to the batch
@@ -211,6 +231,71 @@ where
             let bigint: BigUint = col[row].into();
             write!(line, "{bigint} | ").unwrap();
         }
-        println!("{line}");
     }
+}
+
+
+/// Create a random witness for inputs as field elements starting at row 0
+/// Input: first input, second input, and desired byte length
+/// Panics if the input is too large for the chosen number of bytes
+pub fn create_and_witness<F: PrimeField>(input1: F, input2: F, bytes: usize) -> [Vec<F>; COLUMNS] {
+    let input1_big = input1.to_biguint();
+    let input2_big = input2.to_biguint();
+    if bytes * 8 < input1_big.bitlen() || bytes * 8 < input2_big.bitlen() {
+        panic!("Bytes must be greater or equal than the inputs length");
+    }
+
+    // Compute BigUint output of AND, XOR
+    let big_and = BigUint::bitwise_and(&input1_big, &input2_big, bytes);
+    let big_xor = BigUint::bitwise_xor(&input1_big, &input2_big);
+    // Transform BigUint values to field elements
+    let xor = big_xor.to_field().unwrap();
+    let and = big_and.to_field().unwrap();
+    let sum = input1 + input2;
+
+    let and_row = num_xors(bytes * 8) + 1;
+    let mut and_witness: [Vec<F>; COLUMNS] = array::from_fn(|_| vec![F::zero(); and_row + 1]);
+
+    init_xor(&mut and_witness, 0, bytes * 8, (input1, input2, xor));
+    // Fill in double generic witness
+    and_witness[0][and_row] = input1;
+    and_witness[1][and_row] = input2;
+    and_witness[2][and_row] = sum;
+    and_witness[3][and_row] = sum;
+    and_witness[4][and_row] = xor;
+    and_witness[5][and_row] = and;
+
+    and_witness
+}
+// pub fn create_xor_witness<F: PrimeField>(input1: F, input2: F, bits: usize) -> [Vec<F>; COLUMNS] {
+   
+//     let output = BigUint::bitwise_xor(&input1_big, &input2_big);
+
+//     let mut xor_witness: [Vec<F>; COLUMNS] =
+//         array::from_fn(|_| vec![F::zero(); 1 + num_xors(bits)]);
+
+//     init_xor(
+//         &mut xor_witness,
+//         0,
+//         bits,
+//         (input1, input2, output.to_field().unwrap()),
+//     );
+
+//     xor_witness
+// }
+
+pub fn init_xor<F: PrimeField>(
+    witness: &mut [Vec<F>; COLUMNS],
+    curr_row: usize,
+    bits: usize,
+    words: (F, F, F),
+) {
+    let xor_rows = layout(curr_row, bits);
+
+    witness::init(
+        witness,
+        curr_row,
+        &xor_rows,
+        &variable_map!["in1" => words.0, "in2" => words.1, "out" => words.2],
+    )
 }
