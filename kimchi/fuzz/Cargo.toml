@@ -1,0 +1,44 @@
+[package]
+name = "kimchi-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+honggfuzz = "0.5.51"
+ark-poly = { version = "0.3.0", features = [ "parallel" ] }
+ark-ff = { version = "0.3.0", features = [ "parallel", "asm" ] }
+rand = "0.8.5"
+mina-curves = { path = "../../curves", version = "0.1.0" }
+mina-poseidon = { path = "../../poseidon", version = "0.1.0" }
+num-bigint = { version = "0.4.3", features = ["rand", "serde"]}
+o1-utils = { path = "../../utils", version = "0.1.0" }
+ark-ec = { version = "0.3.0", features = [ "parallel" ] }
+poly-commitment = { path = "../../poly-commitment", version = "0.1.0" }
+ark-std = "0.3.0"
+
+[dependencies.kimchi]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "prove_and_verify"
+path = "fuzz_targets/prove_and_verify.rs"
+test = false
+doc = false
