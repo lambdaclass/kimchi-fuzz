@@ -7,7 +7,7 @@ use kimchi::{
         },
         wires::{COLUMNS, PERMUTS},
         witness::{self, Variables},
-        polynomials::{and, xor::{num_xors, layout}},
+        polynomials::{and, xor::num_xors, not},
     },
     curve::KimchiCurve,
     plonk_sponge::FrSponge,
@@ -161,28 +161,14 @@ where
         EFrSponge: FrSponge<G::ScalarField>,
     {
         let prover = self.0.prover_index.unwrap();
-        let mut witness= self.0.witness.unwrap();
+        let witness = self.0.witness.unwrap();
 
-        let pad = vec![G::ScalarField::zero(); prover.cs.domain.d1.size() - witness[0].len()];
-        let mut witness = array::from_fn(|i| {
-            let mut w = witness[i].to_vec();
-            w.extend_from_slice(&pad);
-            w
-        });
-
-        for (row, gate) in prover.cs.gates.iter().enumerate() {
-            // check if wires are connected
-            for col in 0..PERMUTS {
-                let wire = gate.wires[col];
-
-                if wire.col >= PERMUTS {
-                    println!("aaaasdfghjjdfhsgcgvbjecvof");
-                }
-                if witness[col][row] != witness[wire.col][wire.row] {
-                    witness[col][row] = witness[wire.col][wire.row]
-                    
-                }
-            }
+        if !self.0.disable_gates_checks {
+            // Note: this is already done by ProverProof::create_recursive::()
+            //       not sure why we do it here
+            prover
+                .verify(&witness, &self.0.public_inputs)
+                .map_err(|e| format!("{e:?}"))?;
         }
 
         // add the proof to the batch
@@ -234,68 +220,31 @@ where
     }
 }
 
-
-/// Create a random witness for inputs as field elements starting at row 0
-/// Input: first input, second input, and desired byte length
-/// Panics if the input is too large for the chosen number of bytes
-pub fn create_and_witness<F: PrimeField>(input1: F, input2: F, bytes: usize) -> [Vec<F>; COLUMNS] {
-    let input1_big = input1.to_biguint();
-    let input2_big = input2.to_biguint();
-    if bytes * 8 < input1_big.bitlen() || bytes * 8 < input2_big.bitlen() {
-        panic!("Bytes must be greater or equal than the inputs length");
-    }
-
-    // Compute BigUint output of AND, XOR
-    let big_and = BigUint::bitwise_and(&input1_big, &input2_big, bytes);
-    let big_xor = BigUint::bitwise_xor(&input1_big, &input2_big);
-    // Transform BigUint values to field elements
-    let xor = big_xor.to_field().unwrap();
-    let and = big_and.to_field().unwrap();
-    let sum = input1 + input2;
-
-    let and_row = num_xors(bytes * 8) + 1;
-    let mut and_witness: [Vec<F>; COLUMNS] = array::from_fn(|_| vec![F::zero(); and_row + 1]);
-
-    init_xor(&mut and_witness, 0, bytes * 8, (input1, input2, xor));
-    // Fill in double generic witness
-    and_witness[0][and_row] = input1;
-    and_witness[1][and_row] = input2;
-    and_witness[2][and_row] = sum;
-    and_witness[3][and_row] = sum;
-    and_witness[4][and_row] = xor;
-    and_witness[5][and_row] = and;
-
-    and_witness
-}
-// pub fn create_xor_witness<F: PrimeField>(input1: F, input2: F, bits: usize) -> [Vec<F>; COLUMNS] {
-   
-//     let output = BigUint::bitwise_xor(&input1_big, &input2_big);
-
-//     let mut xor_witness: [Vec<F>; COLUMNS] =
-//         array::from_fn(|_| vec![F::zero(); 1 + num_xors(bits)]);
-
-//     init_xor(
-//         &mut xor_witness,
-//         0,
-//         bits,
-//         (input1, input2, output.to_field().unwrap()),
-//     );
-
-//     xor_witness
-// }
-
-pub fn init_xor<F: PrimeField>(
-    witness: &mut [Vec<F>; COLUMNS],
-    curr_row: usize,
+// Creates as many negations as the number of inputs. The inputs must fit in the native field.
+// We start at the row 0 using generic gates to perform the negations.
+// Input: a vector of words to be negated, and the number of bits (all the same)
+// Panics if the bits length is too small for the inputs
+pub fn create_not_witness_unchecked_length<F: PrimeField>(
+    inputs: &[F],
     bits: usize,
-    words: (F, F, F),
-) {
-    let xor_rows = layout(curr_row, bits);
+) -> [Vec<F>; COLUMNS] {
+    let mut witness: [Vec<F>; COLUMNS] = array::from_fn(|_| vec![F::zero(); 1]);
+    witness[0][0] = F::from(2u8).pow([bits as u64]) - F::one();
+    let result = not::extend_not_witness_unchecked_length(&mut witness, inputs, bits);
+    if let Err(e) = result {
+        panic!("{}", e);
+    }
+    witness
+}
 
-    witness::init(
-        witness,
-        curr_row,
-        &xor_rows,
-        &variable_map!["in1" => words.0, "in2" => words.1, "out" => words.2],
-    )
+pub fn create_random_bytes_number(data: u8) -> usize {
+    if data < 64 {
+        return 8
+    } else if data < 128 {
+        return 16
+    } else if data < 192 {
+        return 32
+    } else {
+        return 64
+    }
 }
