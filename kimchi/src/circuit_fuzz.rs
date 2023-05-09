@@ -1,4 +1,4 @@
-//use honggfuzz::fuzz;
+use honggfuzz::fuzz;
 use kimchi::{
     circuits::{
         polynomials::generic::GenericGateSpec, 
@@ -12,10 +12,10 @@ use kimchi::{
     proof::ProverProof,
     mina_poseidon::{sponge::{DefaultFqSponge, DefaultFrSponge}, constants::PlonkSpongeConstantsKimchi},
     verifier::verify,
+    precomputed_srs
 };
 use groupmap::GroupMap;
 use ark_ff::Zero;
-use ark_poly::EvaluationDomain;
 use std::sync::Arc;
 
 type SpongeParams = PlonkSpongeConstantsKimchi;
@@ -23,7 +23,8 @@ type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
 type VestaScalarSponge = DefaultFrSponge<Fp, SpongeParams>;
 
 fn main() {
-    //fuzz!(|data: u8| {
+    let mut srs: SRS::<Vesta> = precomputed_srs::get_srs();
+    fuzz!(|data: u32| {
         // Create gates
         let g1 = GenericGateSpec::<Fp>::Add {
             left_coeff: None,
@@ -42,18 +43,16 @@ fn main() {
 
         // Create witness
         let mut witness: [Vec::<Fp>; 15] = std::array::from_fn(|_| vec![Fp::zero(); 2]);
-        witness[0][0] = 1_u32.into();  // l | r | o | ...
-        witness[1][0] = 5_u32.into();  // 1 | 5 | 6 | ...
-        witness[2][0] = 6_u32.into();  // 2 | 5 | 7 | ...
-        witness[0][1] = 2_u32.into();  // Gates:
-        witness[1][1] = 5_u32.into();  // add add no coefficients
+        witness[0][0] = data.into();        // l | r | o | ...
+        witness[1][0] = 5_u32.into();       // 1 | 5 | 6 | ...
+        witness[2][0] = (data + 5).into();  // 2 | 5 | 7 | ...
+        witness[0][1] = 2_u32.into();       // Gates:
+        witness[1][1] = 5_u32.into();       // add add no coefficients
         witness[2][1] = 7_u32.into();
 
         // Create constraint system
         let cs = ConstraintSystem::<Fp>::create(vec![circuit_gate_1.clone(), circuit_gate_2.clone()]).build().unwrap();
 
-        // Precomputed_srs takes too long
-        let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
         srs.add_lagrange_basis(cs.domain.d1);
         let srs = Arc::new(srs);
 
@@ -68,5 +67,5 @@ fn main() {
             Ok(_) => {},
             Err(e) => println!("{}", e)
         }
-    //});
+    });
 }
