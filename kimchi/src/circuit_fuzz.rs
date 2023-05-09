@@ -12,10 +12,10 @@ use kimchi::{
     proof::ProverProof,
     mina_poseidon::{sponge::{DefaultFqSponge, DefaultFrSponge}, constants::PlonkSpongeConstantsKimchi},
     verifier::verify,
-    precomputed_srs
 };
 use groupmap::GroupMap;
 use ark_ff::Zero;
+use ark_poly::EvaluationDomain;
 use std::sync::Arc;
 
 type SpongeParams = PlonkSpongeConstantsKimchi;
@@ -23,7 +23,6 @@ type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
 type VestaScalarSponge = DefaultFrSponge<Fp, SpongeParams>;
 
 fn main() {
-    let mut srs: SRS::<Vesta> = precomputed_srs::get_srs();
     fuzz!(|data: u32| {
         // Create gates
         let g1 = GenericGateSpec::<Fp>::Add {
@@ -53,11 +52,12 @@ fn main() {
         // Create constraint system
         let cs = ConstraintSystem::<Fp>::create(vec![circuit_gate_1.clone(), circuit_gate_2.clone()]).build().unwrap();
 
+        let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
         srs.add_lagrange_basis(cs.domain.d1);
-        let srs_arc = Arc::new(srs);
+        let srs = Arc::new(srs);
 
         let (endo_q, _) = endos::<Pallas>();
-        let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs_arc);
+        let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs);
         let verifier_index = prover_index.verifier_index();
         let group_map = <Vesta as CommitmentCurve>::Map::setup();
         // Get proof
