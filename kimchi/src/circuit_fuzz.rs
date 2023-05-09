@@ -26,7 +26,6 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
     let mut witness = std::array::from_fn(|_| vec![Fp::zero(); gates.len()]);
     let mut circuit = Vec::new();
     
-    let mut output = 0;
     for (i, r_val) in gates.iter().enumerate() {
         let gate = GenericGateSpec::<Fp>::Add {
             left_coeff: None,
@@ -38,20 +37,17 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
             // Connect the output to the input below
             wire[2] = Wire::new(i + 1, 0);
             witness[0][i] = starting_value.into();
-            output = starting_value;
         } else if i == gates.len() - 1 {
             // Connect the left input to the output above
             wire[0] = Wire::new(i - 1, 2);
-            witness[0][i] = output.into();
+            witness[0][i] = witness[2][i - 1];
         } else {
             wire[0] = Wire::new(i - 1, 2);
             wire[2] = Wire::new(i + 1, 0);
-            witness[0][i] = output.into();
+            witness[0][i] = witness[2][i - 1];
         }
         witness[1][i] = (*r_val).into();
-        output = output.checked_add(*r_val).unwrap_or((output as u64 + *r_val as u64 - u32::max_value() as u64) as u32);
-        output += r_val;
-        witness[2][i] = output.into();
+        witness[2][i] = witness[0][i] + witness[1][i];
         circuit.push(CircuitGate::<Fp>::create_generic_gadget(wire, gate, None));
     }
     (circuit, witness)
