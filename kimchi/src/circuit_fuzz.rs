@@ -22,35 +22,45 @@ type SpongeParams = PlonkSpongeConstantsKimchi;
 type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
 type VestaScalarSponge = DefaultFrSponge<Fp, SpongeParams>;
 
+fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<CircuitGate<Fp>>, [Vec::<Fp>; 15]) {
+    let mut witness = std::array::from_fn(|_| vec![Fp::zero(); gates.len()]);
+    let mut circuit = Vec::new();
+    
+    let mut output = 0;
+    for (i, r_val) in gates.iter().enumerate() {
+        let gate = GenericGateSpec::<Fp>::Add {
+            left_coeff: None,
+            right_coeff: None,
+            output_coeff: None
+        };
+        let mut wire = Wire::for_row(i);
+        if i == 0 {
+            // Connect the output to the input below
+            wire[2] = Wire::new(i + 1, 0);
+            witness[0][i] = starting_value.into();
+            output = starting_value;
+        } else if i == gates.len() - 1 {
+            // Connect the left input to the output above
+            wire[0] = Wire::new(i - 1, 2);
+            witness[0][i] = output.into();
+        } else {
+            wire[0] = Wire::new(i - 1, 2);
+            wire[2] = Wire::new(i + 1, 0);
+            witness[0][i] = output.into();
+        }
+        witness[1][i] = (*r_val).into();
+        output += r_val;
+        witness[2][i] = output.into();
+        circuit.push(CircuitGate::<Fp>::create_generic_gadget(wire, gate, None));
+    }
+    (circuit, witness)
+}
+
 fn main() {
-    fuzz!(|data: u32| {
-        // Create gates
-        let g1 = GenericGateSpec::<Fp>::Add {
-            left_coeff: None,
-            right_coeff: None,
-            output_coeff: None
-        };
-        let g2 = GenericGateSpec::<Fp>::Add {
-            left_coeff: None,
-            right_coeff: None,
-            output_coeff: None
-        };
-
-        // Create circuits
-        let circuit_gate_1 = CircuitGate::<Fp>::create_generic_gadget(Wire::for_row(0), g1, None);
-        let circuit_gate_2 = CircuitGate::<Fp>::create_generic_gadget(Wire::for_row(1), g2, None);
-
-        // Create witness
-        let mut witness: [Vec::<Fp>; 15] = std::array::from_fn(|_| vec![Fp::zero(); 2]);
-        witness[0][0] = data.into();        // l | r | o | ...
-        witness[1][0] = 5_u32.into();       // 1 | 5 | 6 | ...
-        witness[2][0] = (data + 5).into();  // 2 | 5 | 7 | ...
-        witness[0][1] = 2_u32.into();       // Gates:
-        witness[1][1] = 5_u32.into();       // add add no coefficients
-        witness[2][1] = 7_u32.into();
-
+    fuzz!(|data: (u32, Vec<u32>)| {
+        let (circuit, witness) = gen_circuit_witness(data);
         // Create constraint system
-        let cs = ConstraintSystem::<Fp>::create(vec![circuit_gate_1.clone(), circuit_gate_2.clone()]).build().unwrap();
+        let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
 
         let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
         srs.add_lagrange_basis(cs.domain.d1);
