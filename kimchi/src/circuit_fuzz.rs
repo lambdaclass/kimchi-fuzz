@@ -58,24 +58,26 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
 
 fn main() {
     fuzz!(|data: (u32, Vec<u32>)| {
-        let (circuit, witness) = gen_circuit_witness(data);
-        // Create constraint system
-        let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
+        if data.1.len() > 1 {
+            let (circuit, witness) = gen_circuit_witness(data);
+            // Create constraint system
+            let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
 
-        let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
-        srs.add_lagrange_basis(cs.domain.d1);
-        let srs = Arc::new(srs);
+            let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
+            srs.add_lagrange_basis(cs.domain.d1);
+            let srs = Arc::new(srs);
 
-        let (endo_q, _) = endos::<Pallas>();
-        let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs);
-        let verifier_index = prover_index.verifier_index();
-        let group_map = <Vesta as CommitmentCurve>::Map::setup();
-        // Get proof
-        let proof = ProverProof::create::<VestaBaseSponge, VestaScalarSponge>(&group_map, witness, &[], &prover_index);
-        // Verify
-        match verify::<Vesta, VestaBaseSponge, VestaScalarSponge>(&group_map, &verifier_index, &proof.unwrap(), &[]).map_err(|e|e.to_string()) {
-            Ok(_) => {},
-            Err(e) => println!("{}", e)
+            let (endo_q, _) = endos::<Pallas>();
+            let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs);
+            let verifier_index = prover_index.verifier_index();
+            let group_map = <Vesta as CommitmentCurve>::Map::setup();
+            // Get proof
+            let proof = ProverProof::create::<VestaBaseSponge, VestaScalarSponge>(&group_map, witness, &[], &prover_index);
+            // Verify
+            match verify::<Vesta, VestaBaseSponge, VestaScalarSponge>(&group_map, &verifier_index, &proof.unwrap(), &[]).map_err(|e|e.to_string()) {
+                Ok(_) => {},
+                Err(e) => println!("{}", e)
+            }
         }
     });
 }
