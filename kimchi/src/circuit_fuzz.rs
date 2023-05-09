@@ -54,10 +54,10 @@ fn main() {
         let cs = ConstraintSystem::<Fp>::create(vec![circuit_gate_1.clone(), circuit_gate_2.clone()]).build().unwrap();
 
         srs.add_lagrange_basis(cs.domain.d1);
-        let srs = Arc::new(srs);
+        let srs_arc = Arc::new(srs);
 
         let (endo_q, _) = endos::<Pallas>();
-        let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs);
+        let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs_arc);
         let verifier_index = prover_index.verifier_index();
         let group_map = <Vesta as CommitmentCurve>::Map::setup();
         // Get proof
