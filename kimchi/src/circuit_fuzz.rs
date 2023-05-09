@@ -15,12 +15,13 @@ use kimchi::{
 };
 use groupmap::GroupMap;
 use ark_ff::Zero;
-use ark_poly::EvaluationDomain;
+//use ark_poly::EvaluationDomain;
 use std::sync::Arc;
 
 type SpongeParams = PlonkSpongeConstantsKimchi;
 type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
 type VestaScalarSponge = DefaultFrSponge<Fp, SpongeParams>;
+
 
 fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<CircuitGate<Fp>>, [Vec::<Fp>; 15]) {
     let mut witness = std::array::from_fn(|_| vec![Fp::zero(); gates.len()]);
@@ -54,13 +55,16 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
 }
 
 fn main() {
+    let vestas_srs = std::fs::File::open("../../srs/vesta.srs").unwrap();
+
     fuzz!(|data: (u32, Vec<u32>)| {
         if data.1.len() > 1 {
             let (circuit, witness) = gen_circuit_witness(data);
             // Create constraint system
             let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
 
-            let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
+            //let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
+            let mut srs: SRS::<Vesta> = rmp_serde::from_read(std::io::BufReader::new(vestas_srs)).unwrap();
             srs.add_lagrange_basis(cs.domain.d1);
             let srs = Arc::new(srs);
 
