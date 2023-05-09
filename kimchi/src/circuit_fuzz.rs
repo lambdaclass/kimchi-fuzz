@@ -49,6 +49,7 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
             witness[0][i] = output.into();
         }
         witness[1][i] = (*r_val).into();
+        output = output.checked_add(*r_val).unwrap_or((output as u64 + *r_val as u64 - u32::max_value() as u64) as u32);
         output += r_val;
         witness[2][i] = output.into();
         circuit.push(CircuitGate::<Fp>::create_generic_gadget(wire, gate, None));
