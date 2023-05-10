@@ -23,17 +23,26 @@ type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
 type VestaScalarSponge = DefaultFrSponge<Fp, SpongeParams>;
 
 
-fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<CircuitGate<Fp>>, [Vec::<Fp>; 15]) {
+fn gen_circuit_witness((starting_value, gates): (u32, Vec<(bool, u32)>)) ->  (Vec<CircuitGate<Fp>>, [Vec::<Fp>; 15]) {
     let mut witness = std::array::from_fn(|_| vec![Fp::zero(); gates.len()]);
     let mut circuit = Vec::new();
     
-    for (i, r_val) in gates.iter().enumerate() {
-        let gate = GenericGateSpec::<Fp>::Add {
-            left_coeff: None,
-            right_coeff: None,
-            output_coeff: None
+    for (i, (g_type, r_val)) in gates.iter().enumerate() {
+        let gate = if *g_type {
+            GenericGateSpec::<Fp>::Add {
+                left_coeff: None,
+                right_coeff: None,
+                output_coeff: None
+            }
+        } else {
+            GenericGateSpec::<Fp>::Mul {
+                mul_coeff: None,
+                output_coeff: None
+            }
         };
+
         let mut wire = Wire::for_row(i);
+
         if i == 0 {
             // Connect the output to the input below
             wire[2] = Wire::new(i + 1, 0);
@@ -48,7 +57,11 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
             witness[0][i] = witness[2][i - 1];
         }
         witness[1][i] = (*r_val).into();
-        witness[2][i] = witness[0][i] + witness[1][i];
+        witness[2][i] = if *g_type {
+            witness[0][i] + witness[1][i]
+        } else {
+            witness[0][i] * witness[1][i]
+        };
         circuit.push(CircuitGate::<Fp>::create_generic_gadget(wire, gate, None));
     }
     (circuit, witness)
@@ -56,7 +69,7 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
 
 fn main() {
     loop {
-        fuzz!(|data: (u32, Vec<u32>)| {
+        fuzz!(|data: (u32, Vec<(bool, u32)>)| {
             if data.1.len() > 1 {
                 let (circuit, witness) = gen_circuit_witness(data);
                 // Create constraint system
