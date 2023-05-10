@@ -12,11 +12,11 @@ use kimchi::{
     proof::ProverProof,
     mina_poseidon::{sponge::{DefaultFqSponge, DefaultFrSponge}, constants::PlonkSpongeConstantsKimchi},
     verifier::verify,
-    precomputed_srs::get_srs
 };
 use groupmap::GroupMap;
 use ark_ff::Zero;
 use std::sync::Arc;
+use ark_poly::EvaluationDomain;
 
 type SpongeParams = PlonkSpongeConstantsKimchi;
 type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
@@ -55,9 +55,6 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
 }
 
 fn main() {
-    let vestas_srs: SRS::<Vesta> = get_srs();
-    let mut srs = Arc::new(vestas_srs);
-
     loop {
         fuzz!(|data: (u32, Vec<u32>)| {
             if data.1.len() > 1 {
@@ -65,10 +62,12 @@ fn main() {
                 // Create constraint system
                 let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
 
-                Arc::make_mut(&mut srs).add_lagrange_basis(cs.domain.d1);
+                let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
+                srs.add_lagrange_basis(cs.domain.d1);
+                let srs = Arc::new(srs);
 
                 let (endo_q, _) = endos::<Pallas>();
-                let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, Arc:: clone(&srs));
+                let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs);
                 let verifier_index = prover_index.verifier_index();
                 let group_map = <Vesta as CommitmentCurve>::Map::setup();
                 // Get proof
