@@ -12,6 +12,7 @@ use kimchi::{
     proof::ProverProof,
     mina_poseidon::{sponge::{DefaultFqSponge, DefaultFrSponge}, constants::PlonkSpongeConstantsKimchi},
     verifier::verify,
+    precomputed_srs::get_srs
 };
 use groupmap::GroupMap;
 use ark_ff::Zero;
@@ -55,7 +56,8 @@ fn gen_circuit_witness((starting_value, gates): (u32, Vec<u32>)) ->  (Vec<Circui
 }
 
 fn main() {
-    let vestas_srs = std::fs::File::open("../../srs/vesta.srs").unwrap();
+    //let vestas_srs = std::fs::File::open("../../srs/vesta.srs").unwrap();
+    let vestas_srs: SRS::<Vesta> = get_srs();
 
     fuzz!(|data: (u32, Vec<u32>)| {
         if data.1.len() > 1 {
@@ -64,9 +66,9 @@ fn main() {
             let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
 
             //let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
-            let mut srs: SRS::<Vesta> = rmp_serde::from_read(std::io::BufReader::new(vestas_srs)).unwrap();
-            srs.add_lagrange_basis(cs.domain.d1);
-            let srs = Arc::new(srs);
+            //let mut srs: SRS::<Vesta> = rmp_serde::from_read(std::io::BufReader::new(vestas_srs)).unwrap();
+            let mut srs = Arc::new(vestas_srs);
+            Arc::get_mut(&mut srs).unwrap().add_lagrange_basis(cs.domain.d1);// srs.clone().get_mut().add_lagrange_basis(cs.domain.d1);
 
             let (endo_q, _) = endos::<Pallas>();
             let prover_index = ProverIndex::<Vesta>::create(cs, endo_q, srs);
