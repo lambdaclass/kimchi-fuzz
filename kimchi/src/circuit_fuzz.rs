@@ -1,9 +1,8 @@
 use honggfuzz::fuzz;
 use kimchi::{
     circuits::{
-        polynomials::generic::GenericGateSpec, 
-        gate::CircuitGate, 
-        wires::Wire,
+        gate::{CircuitGate, GateType}, 
+        wires::GateWires,
         constraints::ConstraintSystem
     },
     prover_index::ProverIndex,
@@ -14,64 +13,47 @@ use kimchi::{
     verifier::verify,
 };
 use groupmap::GroupMap;
-use ark_ff::Zero;
 use std::sync::Arc;
 use ark_poly::EvaluationDomain;
+
+use arbitrary::{Unstructured, Arbitrary};
 
 type SpongeParams = PlonkSpongeConstantsKimchi;
 type VestaBaseSponge = DefaultFqSponge<VestaParameters, SpongeParams>;
 type VestaScalarSponge = DefaultFrSponge<Fp, SpongeParams>;
 
+#[derive(Arbitrary)]
+struct CircuitGateFp {
+    #[arbitrary(with = gen_circ_gate)]
+    pub circuit_gate: CircuitGate::<Fp>
+}
 
-fn gen_circuit_witness((starting_value, gates): (u32, Vec<(bool, u32)>)) ->  (Vec<CircuitGate<Fp>>, [Vec::<Fp>; 15]) {
-    let mut witness = std::array::from_fn(|_| vec![Fp::zero(); gates.len()]);
-    let mut circuit = Vec::new();
-    
-    for (i, (g_type, r_val)) in gates.iter().enumerate() {
-        let gate = if *g_type {
-            GenericGateSpec::<Fp>::Add {
-                left_coeff: None,
-                right_coeff: None,
-                output_coeff: None
-            }
-        } else {
-            GenericGateSpec::<Fp>::Mul {
-                mul_coeff: None,
-                output_coeff: None
-            }
-        };
+fn gen_circ_gate(u: &mut Unstructured) -> arbitrary::Result<CircuitGate<Fp>> {
+    Ok(CircuitGate {
+        typ: GateType::arbitrary(u)?,
+        wires: GateWires::arbitrary(u)?,
+        coeffs: gen_coeffs(u)?,
+    })
+}
 
-        let mut wire = Wire::for_row(i);
-
-        if i == 0 {
-            // Connect the output to the input below
-            wire[2] = Wire::new(i + 1, 0);
-            witness[0][i] = starting_value.into();
-        } else if i == gates.len() - 1 {
-            // Connect the left input to the output above
-            wire[0] = Wire::new(i - 1, 2);
-            witness[0][i] = witness[2][i - 1];
-        } else {
-            wire[0] = Wire::new(i - 1, 2);
-            wire[2] = Wire::new(i + 1, 0);
-            witness[0][i] = witness[2][i - 1];
-        }
-        witness[1][i] = (*r_val).into();
-        witness[2][i] = if *g_type {
-            witness[0][i] + witness[1][i]
-        } else {
-            witness[0][i] * witness[1][i]
-        };
-        circuit.push(CircuitGate::<Fp>::create_generic_gadget(wire, gate, None));
-    }
-    (circuit, witness)
+fn gen_coeffs(u: &mut Unstructured) -> arbitrary::Result<Vec<Fp>> {
+    let res_vec = Vec::<i128>::arbitrary(u)?;
+    Ok(res_vec.iter().map(|n| Fp::from(*n)).collect())
 }
 
 fn main() {
     loop {
-        fuzz!(|data: (u32, Vec<(bool, u32)>)| {
-            if data.1.len() > 1 {
-                let (circuit, witness) = gen_circuit_witness(data);
+        fuzz!(|data: (Vec::<CircuitGateFp>, [Vec<i128>; 15]) | {
+            // Skip if the wintess witness rows have different sizes or if they don't match the
+            // circuit length.
+            let correct_shape = data.1.iter().all(|row| row.len() == data.0.len());
+            if data.0.len() > 1 && correct_shape {
+                let (circuit_wrapped, witness_i128) = data;
+                let mut witness = std::array::from_fn(|_| vec![]);
+                for (i, col) in witness_i128.iter().enumerate() {
+                    witness[i] = col.iter().map(|n| Fp::from(*n)).collect();
+                }
+                let circuit = circuit_wrapped.iter().map(|g| (*g).circuit_gate.to_owned()).collect();
                 // Create constraint system
                 let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
 
