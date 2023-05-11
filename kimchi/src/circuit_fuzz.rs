@@ -55,7 +55,11 @@ fn main() {
                 }
                 let circuit = circuit_wrapped.iter().map(|g| (*g).circuit_gate.to_owned()).collect();
                 // Create constraint system
-                let cs = ConstraintSystem::<Fp>::create(circuit).build().unwrap();
+                let cs;
+                match ConstraintSystem::<Fp>::create(circuit).build() {
+                    Ok(res) => cs = res,
+                    Err(_) => return
+                };
 
                 let mut srs = SRS::<Vesta>::create(cs.domain.d1.size());
                 srs.add_lagrange_basis(cs.domain.d1);
@@ -66,9 +70,13 @@ fn main() {
                 let verifier_index = prover_index.verifier_index();
                 let group_map = <Vesta as CommitmentCurve>::Map::setup();
                 // Get proof
-                let proof = ProverProof::create::<VestaBaseSponge, VestaScalarSponge>(&group_map, witness, &[], &prover_index);
+                let proof;
+                match ProverProof::create::<VestaBaseSponge, VestaScalarSponge>(&group_map, witness, &[], &prover_index) {
+                    Ok(res) => proof = res,
+                    Err(_) => return
+                };
                 // Verify
-                match verify::<Vesta, VestaBaseSponge, VestaScalarSponge>(&group_map, &verifier_index, &proof.unwrap(), &[]).map_err(|e|e.to_string()) {
+                match verify::<Vesta, VestaBaseSponge, VestaScalarSponge>(&group_map, &verifier_index, &proof, &[]).map_err(|e|e.to_string()) {
                     Ok(_) => {},
                     Err(e) => println!("{}", e)
                 }
