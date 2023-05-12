@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::io::{Result as IoResult, Write};
 use thiserror::Error;
+use arbitrary::Arbitrary;
 
 use super::{
     argument::ArgumentWitness,
@@ -74,6 +75,7 @@ impl CurrOrNext {
     Hash,
     PartialOrd,
     Ord,
+    Arbitrary
 )]
 #[cfg_attr(
     feature = "ocaml_types",
@@ -141,7 +143,7 @@ pub enum CircuitGateError {
 pub type CircuitGateResult<T> = std::result::Result<T, CircuitGateError>;
 
 #[serde_as]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Arbitrary)]
 /// A single gate in a circuit.
 pub struct CircuitGate<F: PrimeField> {
     /// type of the gate

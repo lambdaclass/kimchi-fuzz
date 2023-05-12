@@ -52,6 +52,8 @@ ocaml-gen = { version = "0.1.0", optional = true }
 wasm-bindgen = { version = "0.2.81", optional = true }
 
 internal-tracing = { path = "../internal-tracing", version = "0.1.0" }
+honggfuzz = "0.5.55"
+arbitrary = { version = "1.3.0", features = ["derive"] }
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -77,9 +79,17 @@ harness = false
 name = "amortization"
 harness = false
 
+[[bin]]
+name = "simple_circ_fuzz"
+path = "src/simple_circ_fuzz.rs"
+
+[[bin]]
+name = "circuit_fuzz"
+path = "src/circuit_fuzz.rs"
+
 [features]
 default = []
-internal_tracing = [ "internal-tracing/enabled" ]
-ocaml_types = [ "ocaml", "ocaml-gen", "poly-commitment/ocaml_types", "mina-poseidon/ocaml_types", "internal-tracing/ocaml_types" ]
-wasm_types = [ "wasm-bindgen" ]
+internal_tracing = ["internal-tracing/enabled"]
+ocaml_types = ["ocaml", "ocaml-gen", "poly-commitment/ocaml_types", "mina-poseidon/ocaml_types", "internal-tracing/ocaml_types"]
+wasm_types = ["wasm-bindgen"]
 check_feature_flags = []
